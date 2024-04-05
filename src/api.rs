@@ -5,9 +5,9 @@ use std::path::Path;
 /// The main API responses that can be received
 ///
 /// Serde will deserialize these into the appropriate type
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(untagged)]
-pub enum WaifuApiResponse {
+pub(crate) enum WaifuApiResponse {
     /// Everything is good, contains the info about the uploaded file
     WaifuResponse(WaifuResponse),
 
@@ -20,7 +20,7 @@ pub enum WaifuApiResponse {
 }
 
 /// This is a standard response for the service containing info about the entry
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct WaifuResponse {
     /// Image token - used for file info and deleting
     pub token: String,
@@ -37,7 +37,7 @@ pub struct WaifuResponse {
 }
 
 /// Response options for the uploaded file
-#[derive(Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub struct WaifuResponseOptions {
     /// If the filename is hidden
     #[serde(rename = "hideFilename")]
@@ -52,7 +52,7 @@ pub struct WaifuResponseOptions {
 }
 
 /// A standard error, all errors from the service take this shape
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct WaifuError {
     /// The name of the error, this is normally the HTTP exception thrown
     pub name: String,
