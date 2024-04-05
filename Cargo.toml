@@ -1,13 +1,14 @@
 [package]
 name = "waifuvault"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Graham Keenan graham.keenan@outlook.com"]
 license = "MIT OR Apache-2.0"
 description = "SDK for interacting with the Waifu Vault API"
 readme = "README.md"
 homepage = "https://waifuvault.moe/"
-repository = "https://github.com/Tyrannican/waifu-vault-sdk"
+repository = "https://github.com/waifuvault/waifuVault-rust-api"
+documentation = "https://docs.rs/waifuvault"
 keywords = ["cli", "api", "file-storage"]
 categories = ["development-tools", "filesystem"]
 
