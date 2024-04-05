@@ -109,12 +109,12 @@
 //!     let caller = ApiCaller::new();
 //!
 //!     // Download a file with no password
-//!     let content = caller.download_file("some-waifu-token", None).await?;
+//!     let content = caller.download_file("https://waifuvault.moe/f/some-file.ext", None).await?;
 //!     let mut f = std::fs::File::create("downloaded_file.txt")?;
 //!     f.write_all(&content)?;
 //!
 //!     // Download a file with no password
-//!     let content = caller.download_file("some-other-waifu-token", Some("password".to_string())).await?;
+//!     let content = caller.download_file("https://waifuvault.moe/f/some-other-file.ext", Some("password".to_string())).await?;
 //!     let mut f = std::fs::File::create("downloaded_file2.txt")?;
 //!     f.write_all(&content)?;
 //!
