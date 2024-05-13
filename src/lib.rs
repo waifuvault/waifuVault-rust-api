@@ -177,10 +177,6 @@ impl ApiCaller {
                 ("one_time_download", request.one_time_download),
             ]);
 
-            if let Some(password) = request.password {
-                intermediate = intermediate.query(&[("password", password)]);
-            }
-
             if let Some(expiry) = request.expires {
                 intermediate = intermediate.query(&[("expires", expiry)]);
             }
@@ -196,14 +192,29 @@ impl ApiCaller {
                     .expect("this should be a valid convertion from os string");
 
                 let file_part = reqwest::multipart::Part::bytes(f).file_name(filename.to_owned());
-                let form = reqwest::multipart::Form::new().part("file", file_part);
+                let mut form = reqwest::multipart::Form::new().part("file", file_part);
+
+                if let Some(password) = request.password {
+                    form = form.text("password", password);
+                }
+
+                println!("Form data: {form:?}");
+
                 intermediate = intermediate.multipart(form);
-                //
             } else if let Some(url) = request.url {
-                intermediate = intermediate.form(&[("url", url)]);
+                intermediate = match request.password {
+                    Some(password) => intermediate.form(&[("url", url), ("password", password)]),
+                    None => intermediate.form(&[("url", url)]),
+                };
             } else if let (Some(raw), Some(filename)) = (request.bytes, request.filename) {
                 let file_part = reqwest::multipart::Part::bytes(raw).file_name(filename);
-                let form = reqwest::multipart::Form::new().part("file", file_part);
+                let mut form = reqwest::multipart::Form::new().part("file", file_part);
+
+                if let Some(password) = request.password {
+                    form = form.text("password", password);
+                }
+
+                println!("Form data: {form:?}");
                 intermediate = intermediate.multipart(form);
             } else {
                 anyhow::bail!("need either a file, url, or stream");
@@ -212,6 +223,7 @@ impl ApiCaller {
             intermediate
         };
 
+        // println!("Request: {request:?}");
         let response = request
             .send()
             .await
@@ -478,7 +490,11 @@ mod tests {
         let caller = ApiCaller::new();
         let upload_request = api::WaifuUploadRequest::new().file(&tmp.file);
 
-        let response = caller.upload_file(upload_request).await;
+        let response = caller
+            .upload_file(upload_request)
+            .await
+            .context("upload file - basic");
+
         assert!(response.is_ok());
 
         let response = response?;
@@ -507,7 +523,10 @@ mod tests {
             .one_time_download(true)
             .hide_filename(true);
 
-        let response = caller.upload_file(upload_request).await?;
+        let response = caller
+            .upload_file(upload_request)
+            .await
+            .context("upload file with options")?;
         let options = response
             .options
             .expect("expected options when there are none");
@@ -528,7 +547,10 @@ mod tests {
         let caller = ApiCaller::new();
         let request = WaifuUploadRequest::new().url(url).expires("1h");
 
-        let response = caller.upload_file(request).await?;
+        let response = caller
+            .upload_file(request)
+            .await
+            .context("upload from url")?;
         let options = response
             .options
             .expect("expected options when there are none");
@@ -690,7 +712,10 @@ mod tests {
             .url(url)
             .expires("1h")
             .password("banana");
-        let response = caller.upload_file(request).await?;
+        let response = caller
+            .upload_file(request)
+            .await
+            .context("uploading protected file to download")?;
         let url = response.url;
 
         let response = caller
