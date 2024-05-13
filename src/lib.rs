@@ -177,10 +177,6 @@ impl ApiCaller {
                 ("one_time_download", request.one_time_download),
             ]);
 
-            if let Some(password) = request.password {
-                intermediate = intermediate.query(&[("password", password)]);
-            }
-
             if let Some(expiry) = request.expires {
                 intermediate = intermediate.query(&[("expires", expiry)]);
             }
@@ -196,14 +192,26 @@ impl ApiCaller {
                     .expect("this should be a valid convertion from os string");
 
                 let file_part = reqwest::multipart::Part::bytes(f).file_name(filename.to_owned());
-                let form = reqwest::multipart::Form::new().part("file", file_part);
+                let mut form = reqwest::multipart::Form::new().part("file", file_part);
+
+                if let Some(password) = request.password {
+                    form = form.text("password", password);
+                }
+
                 intermediate = intermediate.multipart(form);
-                //
             } else if let Some(url) = request.url {
-                intermediate = intermediate.form(&[("url", url)]);
+                intermediate = match request.password {
+                    Some(password) => intermediate.form(&[("url", url, "password", password)]),
+                    None => intermediate.form(&[("url", url)]),
+                };
             } else if let (Some(raw), Some(filename)) = (request.bytes, request.filename) {
                 let file_part = reqwest::multipart::Part::bytes(raw).file_name(filename);
-                let form = reqwest::multipart::Form::new().part("file", file_part);
+                let mut form = reqwest::multipart::Form::new().part("file", file_part);
+
+                if let Some(password) = request.password {
+                    form = form.text("password", password);
+                }
+
                 intermediate = intermediate.multipart(form);
             } else {
                 anyhow::bail!("need either a file, url, or stream");
