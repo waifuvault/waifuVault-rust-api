@@ -213,6 +213,36 @@ impl ApiCaller {
         Self::default()
     }
 
+    /// Creates a bucket with the Waifu Vault API
+    ///
+    /// This bucket can be used to upload files into
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use waifuvault::{ApiCaller, api::WaifuUploadRequest};
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> anyhow::Result<()> {
+    ///     let caller = ApiCaller::new();
+    ///
+    ///     // Create a new bucket to upload files to
+    ///     let bucket = caller.create_bucket().await?;
+    ///
+    ///     // You can now use the bucket token to upload files to the bucket
+    ///
+    ///     let request = WaifuUploadRequest::new()
+    ///         .file("/some/file/path")
+    ///         .bucket(&bucket.token)
+    ///         .password("set a password")
+    ///         .one_time_download(true);
+    ///     let response = caller.upload_file(request).await?;
+    ///
+    ///     // Do something with the response
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
     pub async fn create_bucket(&self) -> anyhow::Result<WaifuBucketResponse> {
         let url = format!("{API}/bucket/create");
         let response: WaifuApiResponse = self
@@ -232,6 +262,27 @@ impl ApiCaller {
         }
     }
 
+    /// Deletes a Bucket with the Waifu Vault API
+    ///
+    /// This will remove ALL files contained within the bucket
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use waifuvault::ApiCaller;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> anyhow::Result<()> {
+    ///     let caller = ApiCaller::new();
+    ///
+    ///     let token = "some-bucket-token";
+    ///
+    ///     // Delete the bucket and all files within
+    ///     caller.delete_bucket(token).await?;
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
     pub async fn delete_bucket(&self, token: impl AsRef<str>) -> anyhow::Result<bool> {
         let url = format!("{API}/bucket/{}", token.as_ref());
         let response: WaifuApiResponse = self
@@ -251,6 +302,33 @@ impl ApiCaller {
         }
     }
 
+    /// Gets information on files contained within a Bucket with the Waifu Vault API
+    ///
+    /// This returns a [`api::WaifuBucketResponse`] which contains an array of all files
+    /// contained within the bucket as well as the bucket token.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use waifuvault::ApiCaller;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> anyhow::Result<()> {
+    ///     let caller = ApiCaller::new();
+    ///
+    ///     let token = "some-bucket-token";
+    ///
+    ///     // Get bucket information
+    ///     let info = caller.get_bucket(token).await?;
+    ///
+    ///     // You can now get access to the file information for files inside the bucket
+    ///     for file in info.files.iter() {
+    ///         // Do something with the file information
+    ///     }
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
     pub async fn get_bucket(&self, token: impl AsRef<str>) -> anyhow::Result<WaifuBucketResponse> {
         let url = format!("{API}/bucket/get");
         let mut body = HashMap::new();
