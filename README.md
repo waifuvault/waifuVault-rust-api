@@ -19,6 +19,9 @@ The following interactions are allowed:
 * [Modify File Options](#modify-file)
 * [Delete a File](#delete-file)
 * [Download a File](#download-file)
+* [Create a Bucket](#create-bucket)
+* [Delete a Bucket](#delete-bucket)
+* [Get Bucket Information](#get-bucket)
 
 ## Upload a File<a name="upload-file" />
 
