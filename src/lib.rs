@@ -123,7 +123,7 @@
 //! ```
 pub mod api;
 
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use api::*;
 
@@ -143,6 +143,67 @@ impl ApiCaller {
     /// Create a new Waifu Vault API Caller
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub async fn create_bucket(&self) -> anyhow::Result<WaifuBucketResponse> {
+        let url = format!("{API}/bucket/create");
+        let response: WaifuApiResponse = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("calling create bucket endpoint")?
+            .json()
+            .await
+            .context("converting create bucket api response")?;
+
+        match response {
+            WaifuApiResponse::WaifuBucketResponse(resp) => Ok(resp),
+            WaifuApiResponse::WaifuError(err) => Err(err.into()),
+            _ => anyhow::bail!("unexpected response: {response:?}"),
+        }
+    }
+
+    pub async fn delete_bucket(&self, token: impl AsRef<str>) -> anyhow::Result<()> {
+        let url = format!("{API}/bucket/{}", token.as_ref());
+        let response: WaifuApiResponse = self
+            .client
+            .delete(&url)
+            .send()
+            .await
+            .context("sending delete bucket request")?
+            .json()
+            .await
+            .context("converting response")?;
+
+        match response {
+            WaifuApiResponse::Delete(_) => Ok(()),
+            WaifuApiResponse::WaifuError(err) => Err(err.into()),
+            _ => anyhow::bail!("Received unexpected response from DELETE bucket endpoint"),
+        }
+    }
+
+    pub async fn get_bucket(&self, token: impl AsRef<str>) -> anyhow::Result<WaifuBucketResponse> {
+        let url = format!("{API}/bucket/get");
+        let mut body = HashMap::new();
+        body.insert("bucket_token", token.as_ref());
+
+        let response: WaifuApiResponse = self
+            .client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .context("sending get bucket request")?
+            .json()
+            .await
+            .context("converting response")?;
+
+        match response {
+            WaifuApiResponse::WaifuBucketResponse(resp) => Ok(resp),
+            WaifuApiResponse::WaifuError(err) => Err(err.into()),
+            _ => anyhow::bail!("unexpected response from get bucket endpoint: {response:?}"),
+        }
     }
 
     /// Upload a file to Waifu Vault
@@ -171,8 +232,14 @@ impl ApiCaller {
     /// }
     /// ```
     pub async fn upload_file(&self, request: WaifuUploadRequest) -> anyhow::Result<WaifuResponse> {
+        let url = if let Some(bucket) = request.bucket {
+            &format!("{API}/{bucket}")
+        } else {
+            API
+        };
+
         let request = {
-            let mut intermediate = self.client.put(API).query(&[
+            let mut intermediate = self.client.put(url).query(&[
                 ("hide_filename", request.one_time_download),
                 ("one_time_download", request.one_time_download),
             ]);
@@ -198,8 +265,6 @@ impl ApiCaller {
                     form = form.text("password", password);
                 }
 
-                println!("Form data: {form:?}");
-
                 intermediate = intermediate.multipart(form);
             } else if let Some(url) = request.url {
                 intermediate = match request.password {
@@ -214,7 +279,6 @@ impl ApiCaller {
                     form = form.text("password", password);
                 }
 
-                println!("Form data: {form:?}");
                 intermediate = intermediate.multipart(form);
             } else {
                 anyhow::bail!("need either a file, url, or stream");
@@ -223,7 +287,6 @@ impl ApiCaller {
             intermediate
         };
 
-        // println!("Request: {request:?}");
         let response = request
             .send()
             .await
@@ -435,6 +498,7 @@ pub(crate) fn parse_response(response: WaifuApiResponse) -> anyhow::Result<Waifu
         WaifuApiResponse::WaifuResponse(resp) => Ok(resp),
         WaifuApiResponse::WaifuError(err) => Err(anyhow::anyhow!(err)),
         WaifuApiResponse::Delete(_) => unreachable!("unused"),
+        WaifuApiResponse::WaifuBucketResponse(_) => unreachable!("unused"),
     }
 }
 
