@@ -121,6 +121,74 @@
 //!     Ok(())
 //! }
 //! ```
+//!
+//! # Create a Bucket
+//!
+//! ```rust,no_run
+//! use waifuvault::{ApiCaller, api::WaifuUploadRequest};
+//!
+//! #[tokio::main]
+//! async fn main() -> anyhow::Result<()> {
+//!     let caller = ApiCaller::new();
+//!
+//!     // Create a new bucket to upload files to
+//!     let bucket = caller.create_bucket().await?;
+//!
+//!     // You can now use the bucket token to upload files to the bucket
+//!
+//!     let request = WaifuUploadRequest::new()
+//!         .file("/some/file/path")
+//!         .bucket(&bucket.token)
+//!         .password("set a password")
+//!         .one_time_download(true);
+//!     let response = caller.upload_file(request).await?;
+//!
+//!     // Do something with the response
+//!
+//!     Ok(())
+//! }
+//! ```
+//!
+//! # Delete a Bucket
+//!
+//! ```rust,no_run
+//! use waifuvault::ApiCaller;
+//!
+//! #[tokio::main]
+//! async fn main() -> anyhow::Result<()> {
+//!     let caller = ApiCaller::new();
+//!
+//!     let token = "some-bucket-token";
+//!
+//!     // Delete the bucket and all files within
+//!     caller.delete_bucket(token).await?;
+//!
+//!     Ok(())
+//! }
+//! ```
+//!
+//! # Get Bucket information
+//!
+//! ```rust,no_run
+//! use waifuvault::ApiCaller;
+//!
+//! #[tokio::main]
+//! async fn main() -> anyhow::Result<()> {
+//!     let caller = ApiCaller::new();
+//!
+//!     let token = "some-bucket-token";
+//!
+//!     // Get bucket information
+//!     let info = caller.get_bucket(token).await?;
+//!
+//!     // You can now get access to the file information for files inside the bucket
+//!     for file in info.files.iter() {
+//!         // Do something with the file information
+//!     }
+//!
+//!     Ok(())
+//! }
+//! ```
 pub mod api;
 
 use std::{collections::HashMap, path::PathBuf};
