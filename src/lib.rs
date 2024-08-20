@@ -164,7 +164,7 @@ impl ApiCaller {
         }
     }
 
-    pub async fn delete_bucket(&self, token: impl AsRef<str>) -> anyhow::Result<()> {
+    pub async fn delete_bucket(&self, token: impl AsRef<str>) -> anyhow::Result<bool> {
         let url = format!("{API}/bucket/{}", token.as_ref());
         let response: WaifuApiResponse = self
             .client
@@ -177,7 +177,7 @@ impl ApiCaller {
             .context("converting response")?;
 
         match response {
-            WaifuApiResponse::Delete(_) => Ok(()),
+            WaifuApiResponse::Delete(success) => Ok(success),
             WaifuApiResponse::WaifuError(err) => Err(err.into()),
             _ => anyhow::bail!("Received unexpected response from DELETE bucket endpoint"),
         }
@@ -789,6 +789,76 @@ mod tests {
 
         assert_eq!(og_hash, result);
         be_nice().await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn create_and_delete_bucket() -> Result<()> {
+        let caller = ApiCaller::new();
+        let response = caller.create_bucket().await?;
+        assert!(!response.token.is_empty());
+
+        let token = response.token;
+        assert!(response.files.is_empty());
+
+        let resp = caller.delete_bucket(token).await?;
+        assert!(resp);
+
+        be_nice().await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn create_and_get_bucket() -> Result<()> {
+        let caller = ApiCaller::new();
+        let bucket = caller.create_bucket().await?;
+        let token = bucket.token;
+
+        let info = caller.get_bucket(&token).await?;
+        assert!(info.token == token);
+        assert!(info.files.is_empty());
+
+        caller.delete_bucket(token).await?;
+
+        be_nice().await;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn create_bucket_and_upload_file() -> Result<()> {
+        let url = "https://waifuvault.moe/assets/custom/images/08.png";
+        let caller = ApiCaller::new();
+
+        let bucket = caller.create_bucket().await?;
+        let token = bucket.token;
+        let request = WaifuUploadRequest::new()
+            .bucket(&token)
+            .url(url)
+            .expires("1h");
+
+        caller.upload_file(request).await?;
+
+        let info = caller.get_bucket(&token).await?;
+        assert!(info.files.len() == 1);
+
+        caller.delete_bucket(token).await?;
+
+        be_nice().await;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn delete_bucket_incorrect_token() -> Result<()> {
+        let caller = ApiCaller::new();
+        let response = caller.delete_bucket("garbage").await;
+        assert!(response.is_err());
+
+        let inner = response.unwrap_err();
+        let waifu_err = inner.downcast::<WaifuError>()?;
+        assert_eq!(waifu_err.status, 400);
+
         Ok(())
     }
 
