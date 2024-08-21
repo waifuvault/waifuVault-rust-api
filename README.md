@@ -23,7 +23,9 @@ The following interactions are allowed:
 * [Delete a Bucket](#delete-bucket)
 * [Get Bucket Information](#get-bucket)
 
-## Upload a File<a name="upload-file" />
+## Upload a File<a id="upload-file"></a>
+
+<a>
 
 The following options can be set when creating a `WaifuUploadRequest`:
 
@@ -71,7 +73,7 @@ The following options can be set when creating a `WaifuUploadRequest`:
  }
  ```
 
-## Get File Information<a name="file-info" />
+## Get File Information<a id="file-info"></a>
 
 Retrieves information about a file stored with the API
 
@@ -100,7 +102,7 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-## Modify File Options<a name="modify-file" />
+## Modify File Options<a id="modify-file"></a>
 
 Modifies the options for a stored file in the API
 
@@ -137,7 +139,7 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-## Delete a File<a name="delete-file" />
+## Delete a File<a id="delete-file"></a>
 
 Deletes a file using the API denoted by the content token.
 
@@ -154,7 +156,7 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-## Download a File<a name="download-file" />
+## Download a File<a id="download-file"></a>
 
 Downloads a file from the API with the given token
 
@@ -180,7 +182,7 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-## Create a Bucket<a name="create-bucket" />
+## Create a Bucket<a id="create-bucket"></a>
 
 Creates a new bucket with the API to upload files to
 
@@ -209,7 +211,7 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-## Delete a Bucket<a name="delete-bucket" />
+## Delete a Bucket<a id="delete-bucket"></a>
 
 Delete a bucket and all the files contained within it.
 
@@ -234,7 +236,7 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-## Get Bucket Information<a name="get-bucket" />
+## Get Bucket Information<a id="get-bucket"></a>
 
 Retrieve information about files contained within a bucket.
 
