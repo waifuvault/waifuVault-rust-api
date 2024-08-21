@@ -11,6 +11,9 @@ pub(crate) enum WaifuApiResponse {
     /// Everything is good, contains the info about the uploaded file
     WaifuResponse(WaifuResponse),
 
+    /// Everything is good, contains info about the bucket
+    WaifuBucketResponse(WaifuBucketResponse),
+
     /// Something went wrong, shows the error type and reason
     WaifuError(WaifuError),
 
@@ -22,11 +25,14 @@ pub(crate) enum WaifuApiResponse {
 /// This is a standard response for the service containing info about the entry
 #[derive(Debug, Deserialize, Clone)]
 pub struct WaifuResponse {
-    /// Image token - used for file info and deleting
+    /// File token - used for file info and deleting
     pub token: String,
 
     /// Location of the uploaded file
     pub url: String,
+
+    /// Bucket identifier
+    pub bucket: Option<String>,
 
     /// How long the file will exist for
     #[serde(rename = "retentionPeriod")]
@@ -49,6 +55,16 @@ pub struct WaifuResponseOptions {
 
     /// If this file requires a password
     pub protected: bool,
+}
+
+/// Successful response from the API when interacting with the Bucket API
+#[derive(Debug, Deserialize, Clone)]
+pub struct WaifuBucketResponse {
+    /// Bucket token identifier
+    pub token: String,
+
+    /// Files contained within the bucket
+    pub files: Vec<WaifuResponse>,
 }
 
 /// A standard error, all errors from the service take this shape
@@ -87,6 +103,9 @@ pub struct WaifuUploadRequest {
 
     /// Raw bytes to upload to the vault
     pub(crate) bytes: Option<Vec<u8>>,
+
+    /// Token of the bucket to upload to
+    pub(crate) bucket: Option<String>,
 
     /// Filename to be used when uploading raw bytes
     pub(crate) filename: Option<String>,
@@ -131,6 +150,12 @@ impl WaifuUploadRequest {
     pub fn bytes(mut self, bytes: Vec<u8>, filename: impl AsRef<str>) -> Self {
         self.bytes = Some(bytes);
         self.filename = Some(filename.as_ref().to_string());
+        self
+    }
+
+    /// Sets the bucket token on the request
+    pub fn bucket(mut self, token: impl AsRef<str>) -> Self {
+        self.bucket = Some(token.as_ref().to_string());
         self
     }
 

@@ -19,6 +19,9 @@ The following interactions are allowed:
 * [Modify File Options](#modify-file)
 * [Delete a File](#delete-file)
 * [Download a File](#download-file)
+* [Create a Bucket](#create-bucket)
+* [Delete a Bucket](#delete-bucket)
+* [Get Bucket Information](#get-bucket)
 
 ## Upload a File<a name="upload-file" />
 
@@ -27,6 +30,7 @@ The following options can be set when creating a `WaifuUploadRequest`:
 * `file`: Optional value to upload a file from disk
 * `url`: Optional value to upload content from a URL
 * `bytes`: Optional value to upload raw bytes
+* `bucket`: Optional value to upload the file to a specific bucket
 * `expires`: Optional value to define the expiry time for the content
     * Valid values are: `m`, `h`, `d`
     * If not set, the content exists for as long as the retention policy of the service
@@ -171,6 +175,90 @@ async fn main() -> anyhow::Result<()> {
     let content = caller.download_file("https://waifuvault.moe/f/some-other-file.ext", Some("password".to_string())).await?;
     let mut f = std::fs::File::create("downloaded_file2.txt")?;
     f.write_all(&content)?;
+
+    Ok(())
+}
+```
+
+## Create a Bucket<a name="create-bucket" />
+
+Creates a new bucket with the API to upload files to
+
+```rust
+use waifuvault::{ApiCaller, api::WaifuUploadRequest};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let caller = ApiCaller::new();
+
+    // Create a new bucket to upload files to
+    let bucket = caller.create_bucket().await?;
+
+    // You can now use the bucket token to upload files to the bucket
+
+    let request = WaifuUploadRequest::new()
+        .file("/some/file/path")
+        .bucket(&bucket.token)
+        .password("set a password")
+        .one_time_download(true);
+    let response = caller.upload_file(request).await?;
+
+    // Do something with the response
+
+    Ok(())
+}
+```
+
+## Delete a Bucket<a name="delete-bucket" />
+
+Delete a bucket and all the files contained within it.
+
+The following parameters are required:
+
+* `token`: The bucket token for the bucket to delete
+
+
+```rust
+use waifuvault::ApiCaller;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let caller = ApiCaller::new();
+
+    let token = "some-bucket-token";
+
+    // Delete the bucket and all files within
+    caller.delete_bucket(token).await?;
+
+    Ok(())
+}
+```
+
+## Get Bucket Information<a name="get-bucket" />
+
+Retrieve information about files contained within a bucket.
+
+The following parameters are required:
+
+* `token`: The bucket token for the bucket to inspect
+
+
+```rust
+use waifuvault::ApiCaller;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let caller = ApiCaller::new();
+
+    let token = "some-bucket-token";
+
+    // Get bucket information
+    let info = caller.get_bucket(token).await?;
+
+    // You can now get access to the file information for files inside the bucket
+    for file in info.files.iter() {
+        // Do something with the file information
+    }
 
     Ok(())
 }
