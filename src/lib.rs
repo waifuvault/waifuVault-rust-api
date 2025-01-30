@@ -197,7 +197,6 @@ use api::*;
 
 use anyhow::Context;
 use reqwest::Client;
-use serde::Serialize;
 
 /// REST endpoint for the service
 // const API: &str = "https://waifuvault.moe/rest";
@@ -368,6 +367,8 @@ impl ApiCaller {
         } else {
             API
         };
+
+        println!("API: {url}");
 
         let request = {
             let mut intermediate = self.client.put(url).query(&[
@@ -676,12 +677,12 @@ impl ApiCaller {
         }
     }
 
-    pub async fn disassociate_from_album<S: AsRef<str> + Serialize>(
+    pub async fn disassociate_from_album(
         &self,
-        album_token: S,
-        file_tokens: &[S],
+        album_token: &str,
+        file_tokens: &[&str],
     ) -> anyhow::Result<WaifuAlbumEntry> {
-        let url = format!("{API}/album/{}/disassociate", album_token.as_ref());
+        let url = format!("{API}/album/{}/disassociate", album_token);
         let mut body = HashMap::new();
         body.insert("fileTokens", file_tokens);
 
@@ -919,9 +920,12 @@ mod tests {
             }
         }
 
-        pub async fn create_bucket(&self) -> Result<WaifuBucketEntry> {
+        pub async fn create_bucket(&mut self) -> Result<WaifuBucketEntry> {
             match self.caller.create_bucket().await {
-                Ok(r) => Ok(r),
+                Ok(r) => {
+                    self.bucket_tkn = Some(r.token.clone());
+                    Ok(r)
+                }
                 Err(e) => {
                     self.destroy().await?;
                     return Err(e);
@@ -929,9 +933,15 @@ mod tests {
             }
         }
 
-        pub async fn upload_file(&self, upload_req: WaifuUploadRequest) -> Result<WaifuFileEntry> {
+        pub async fn upload_file(
+            &mut self,
+            upload_req: WaifuUploadRequest,
+        ) -> Result<WaifuFileEntry> {
             match self.caller.upload_file(upload_req).await {
-                Ok(r) => Ok(r),
+                Ok(r) => {
+                    self.file_tkn = Some(r.token.clone());
+                    Ok(r)
+                }
                 Err(e) => {
                     self.destroy().await?;
                     return Err(e);
@@ -939,9 +949,12 @@ mod tests {
             }
         }
 
-        pub async fn create_album(&self, bkt_tkn: &str, name: &str) -> Result<WaifuAlbumEntry> {
+        pub async fn create_album(&mut self, bkt_tkn: &str, name: &str) -> Result<WaifuAlbumEntry> {
             match self.caller.create_album(bkt_tkn, name).await {
-                Ok(r) => Ok(r),
+                Ok(r) => {
+                    self.album_tkn = Some(r.token.clone());
+                    Ok(r)
+                }
                 Err(e) => {
                     self.destroy().await?;
                     return Err(e);
@@ -1290,14 +1303,14 @@ mod tests {
     #[tokio::test]
     async fn create_album() -> Result<()> {
         let caller = ApiCaller::new();
-        let dropper = Dropper::new(&caller);
+        let mut dropper = Dropper::new(&caller);
         let bucket_response = dropper.create_bucket().await?;
         assert!(!bucket_response.token.is_empty());
 
         let bkt_tkn = bucket_response.token;
         let album_response = dropper.create_album(&bkt_tkn, "bigknob").await?;
         assert!(album_response.files.is_empty());
-        dropper.destroy().await?;
+        let _ = dropper.destroy().await;
 
         Ok(())
     }
@@ -1305,7 +1318,7 @@ mod tests {
     #[tokio::test]
     async fn associate_file_with_album() -> Result<()> {
         let caller = ApiCaller::new();
-        let dropper = Dropper::new(&caller);
+        let mut dropper = Dropper::new(&caller);
         let url = "https://waifuvault.moe/assets/custom/images/08.png";
 
         let bucket = dropper.create_bucket().await?;
@@ -1315,7 +1328,7 @@ mod tests {
             .expires("1h");
 
         let file = dropper.upload_file(request).await?;
-        let album = dropper.create_album(&bucket.token, "dsklhjjsh").await?;
+        let album = dropper.create_album(&bucket.token, "kdkfjdk").await?;
 
         let success = match caller
             .associate_with_album(&album.token, &[&file.token])
@@ -1327,6 +1340,82 @@ mod tests {
                 return Err(e);
             }
         };
+
+        assert_eq!(success.bucket_token, bucket.token);
+        assert_eq!(success.files.len(), 1);
+
+        let f = &success.files[0];
+        assert_eq!(f.token, file.token);
+        assert_eq!(f.bucket, Some(bucket.token));
+
+        let _ = dropper.destroy().await;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn disassociate_from_album() -> anyhow::Result<()> {
+        let caller = ApiCaller::new();
+        let mut dropper = Dropper::new(&caller);
+        let url = "https://waifuvault.moe/assets/custom/images/08.png";
+
+        let bucket = dropper.create_bucket().await?;
+        let request = WaifuUploadRequest::new()
+            .bucket(&bucket.token)
+            .url(url)
+            .expires("1h");
+
+        let file = dropper.upload_file(request).await?;
+        let album = dropper.create_album(&bucket.token, "kdkfjdk").await?;
+
+        let assoc = match caller
+            .associate_with_album(&album.token, &[&file.token])
+            .await
+        {
+            Ok(success) => success,
+            Err(e) => {
+                dropper.destroy().await?;
+                return Err(e);
+            }
+        };
+
+        assert_eq!(assoc.files.len(), 1);
+
+        let disassoc = match caller
+            .disassociate_from_album(&album.token, &[&file.token])
+            .await
+        {
+            Ok(success) => success,
+            Err(e) => {
+                let _ = dropper.destroy().await;
+                return Err(e);
+            }
+        };
+
+        assert!(disassoc.files.is_empty());
+
+        let _ = dropper.destroy().await;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn delete_album() -> Result<()> {
+        let caller = ApiCaller::new();
+        let mut dropper = Dropper::new(&caller);
+        let bucket = dropper.create_bucket().await?;
+        let album = dropper.create_album(&bucket.token, "tittyjiggler").await?;
+
+        let delete = match caller.delete_album(&album.token).await {
+            Ok(success) => success,
+            Err(e) => {
+                let _ = dropper.destroy().await;
+                return Err(e);
+            }
+        };
+
+        assert!(delete.success);
+
+        let _ = dropper.destroy().await;
 
         Ok(())
     }
