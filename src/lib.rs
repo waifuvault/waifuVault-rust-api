@@ -197,9 +197,11 @@ use api::*;
 
 use anyhow::Context;
 use reqwest::Client;
+use serde::Serialize;
 
 /// REST endpoint for the service
-const API: &str = "https://waifuvault.moe/rest";
+// const API: &str = "https://waifuvault.moe/rest";
+const API: &str = "http:127.0.0.1:8081/rest";
 
 /// Api controller which calls the endpoint
 #[derive(Debug, Clone, Default)]
@@ -243,7 +245,7 @@ impl ApiCaller {
     ///     Ok(())
     /// }
     /// ```
-    pub async fn create_bucket(&self) -> anyhow::Result<WaifuBucketResponse> {
+    pub async fn create_bucket(&self) -> anyhow::Result<WaifuBucketEntry> {
         let url = format!("{API}/bucket/create");
         let response: WaifuApiResponse = self
             .client
@@ -283,8 +285,8 @@ impl ApiCaller {
     ///     Ok(())
     /// }
     /// ```
-    pub async fn delete_bucket(&self, token: impl AsRef<str>) -> anyhow::Result<bool> {
-        let url = format!("{API}/bucket/{}", token.as_ref());
+    pub async fn delete_bucket(&self, token: &str) -> anyhow::Result<bool> {
+        let url = format!("{API}/bucket/{}", token);
         let response: WaifuApiResponse = self
             .client
             .delete(&url)
@@ -309,30 +311,11 @@ impl ApiCaller {
     ///
     /// # Example
     ///
-    /// ```rust,no_run
-    /// use waifuvault::ApiCaller;
     ///
-    /// #[tokio::main]
-    /// async fn main() -> anyhow::Result<()> {
-    ///     let caller = ApiCaller::new();
-    ///
-    ///     let token = "some-bucket-token";
-    ///
-    ///     // Get bucket information
-    ///     let info = caller.get_bucket(token).await?;
-    ///
-    ///     // You can now get access to the file information for files inside the bucket
-    ///     for file in info.files.iter() {
-    ///         // Do something with the file information
-    ///     }
-    ///
-    ///     Ok(())
-    /// }
-    /// ```
-    pub async fn get_bucket(&self, token: impl AsRef<str>) -> anyhow::Result<WaifuBucketResponse> {
+    pub async fn get_bucket(&self, token: &str) -> anyhow::Result<WaifuBucketEntry> {
         let url = format!("{API}/bucket/get");
         let mut body = HashMap::new();
-        body.insert("bucket_token", token.as_ref());
+        body.insert("bucket_token", token);
 
         let response: WaifuApiResponse = self
             .client
@@ -377,7 +360,7 @@ impl ApiCaller {
     ///     Ok(())
     /// }
     /// ```
-    pub async fn upload_file(&self, request: WaifuUploadRequest) -> anyhow::Result<WaifuResponse> {
+    pub async fn upload_file(&self, request: WaifuUploadRequest) -> anyhow::Result<WaifuFileEntry> {
         let url = if let Some(bucket) = request.bucket {
             &format!("{API}/{bucket}")
         } else {
@@ -386,8 +369,8 @@ impl ApiCaller {
 
         let request = {
             let mut intermediate = self.client.put(url).query(&[
-                ("hide_filename", request.one_time_download),
-                ("one_time_download", request.one_time_download),
+                ("hide_filename", request.hide_filename),
+                ("oneTimeDownload", request.one_time_download),
             ]);
 
             if let Some(expiry) = request.expires {
@@ -469,7 +452,7 @@ impl ApiCaller {
     ///     Ok(())
     /// }
     /// ```
-    pub async fn file_info(&self, request: WaifuGetRequest) -> anyhow::Result<WaifuResponse> {
+    pub async fn file_info(&self, request: WaifuGetRequest) -> anyhow::Result<WaifuFileEntry> {
         let url = format!("{API}/{}", request.token);
         let request = self
             .client
@@ -518,7 +501,7 @@ impl ApiCaller {
     pub async fn update_file(
         &self,
         request: WaifuModificationRequest,
-    ) -> anyhow::Result<WaifuResponse> {
+    ) -> anyhow::Result<WaifuFileEntry> {
         let url = format!("{API}/{}", request.token);
         let response: WaifuApiResponse = self
             .client
@@ -551,8 +534,8 @@ impl ApiCaller {
     ///     Ok(())
     /// }
     /// ```
-    pub async fn delete_file(&self, token: impl AsRef<str>) -> anyhow::Result<bool> {
-        let url = format!("{API}/{}", token.as_ref());
+    pub async fn delete_file(&self, token: &str) -> anyhow::Result<bool> {
+        let url = format!("{API}/{}", token);
         let response: WaifuApiResponse = self
             .client
             .delete(url)
@@ -593,11 +576,11 @@ impl ApiCaller {
     /// ```
     pub async fn download_file(
         &self,
-        url: impl AsRef<str>,
+        url: &str,
         password: Option<String>,
     ) -> anyhow::Result<Vec<u8>> {
         let request = {
-            let mut r = self.client.get(url.as_ref());
+            let mut r = self.client.get(url);
             if let Some(password) = &password {
                 r = r.header("x-password", password);
             }
@@ -635,16 +618,242 @@ impl ApiCaller {
 
         Ok(content)
     }
+
+    pub async fn create_album(
+        &self,
+        bucket_token: &str,
+        album_name: &str,
+    ) -> anyhow::Result<WaifuAlbumEntry> {
+        let url = format!("{API}/album/{}", bucket_token);
+        let mut body = HashMap::new();
+        body.insert("name", album_name);
+
+        let response: WaifuApiResponse = self
+            .client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .context("sending create album request")?
+            .json()
+            .await
+            .context("converting response")?;
+
+        match response {
+            WaifuApiResponse::WaifuAlbumResponse(resp) => Ok(resp),
+            WaifuApiResponse::WaifuError(err) => Err(err.into()),
+            _ => anyhow::bail!("unexpected response from create album endpoint: {response:?}"),
+        }
+    }
+
+    pub async fn associate_with_album<S: AsRef<str> + Serialize>(
+        &self,
+        album_token: S,
+        file_tokens: &[S],
+    ) -> anyhow::Result<WaifuAlbumEntry> {
+        let url = format!("{API}/album/{}/associate", album_token.as_ref());
+        let mut body = HashMap::new();
+        body.insert("fileTokens", file_tokens);
+
+        let response: WaifuApiResponse = self
+            .client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .context("sending album association request")?
+            .json()
+            .await
+            .context("converting response")?;
+
+        match response {
+            WaifuApiResponse::WaifuAlbumResponse(resp) => Ok(resp),
+            WaifuApiResponse::WaifuError(err) => Err(err.into()),
+            _ => anyhow::bail!("unexpected response from album association endpoint: {response:?}"),
+        }
+    }
+
+    pub async fn disassociate_from_album<S: AsRef<str> + Serialize>(
+        &self,
+        album_token: S,
+        file_tokens: &[S],
+    ) -> anyhow::Result<WaifuAlbumEntry> {
+        let url = format!("{API}/album/{}/disassociate", album_token.as_ref());
+        let mut body = HashMap::new();
+        body.insert("fileTokens", file_tokens);
+
+        let response: WaifuApiResponse = self
+            .client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .context("sending album association request")?
+            .json()
+            .await
+            .context("converting response")?;
+
+        match response {
+            WaifuApiResponse::WaifuAlbumResponse(resp) => Ok(resp),
+            WaifuApiResponse::WaifuError(err) => Err(err.into()),
+            _ => anyhow::bail!("unexpected response from album association endpoint: {response:?}"),
+        }
+    }
+
+    pub async fn delete_album(&self, album_token: &str) -> anyhow::Result<WaifuGenericMessage> {
+        let url = format!("{API}/album/{}", album_token);
+        let response: WaifuApiResponse = self
+            .client
+            .delete(&url)
+            .send()
+            .await
+            .context("sending album delete request")?
+            .json()
+            .await
+            .context("converting response")?;
+
+        match response {
+            WaifuApiResponse::WaifuGenericResponse(resp) => Ok(resp),
+            WaifuApiResponse::WaifuError(err) => Err(err.into()),
+            _ => anyhow::bail!("unexpected response from album deletion endpoint: {response:?}"),
+        }
+    }
+
+    pub async fn get_album(&self, album_token: &str) -> anyhow::Result<WaifuAlbumEntry> {
+        let url = format!("{API}/album/{album_token}");
+        let response: WaifuApiResponse = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("sending get album request")?
+            .json()
+            .await
+            .context("converting response")?;
+
+        match response {
+            WaifuApiResponse::WaifuAlbumResponse(resp) => Ok(resp),
+            WaifuApiResponse::WaifuError(err) => Err(err.into()),
+            _ => anyhow::bail!("unexpected response from get album endpoint: {response:?}"),
+        }
+    }
+
+    pub async fn share_album(&self, album_token: &str) -> anyhow::Result<WaifuGenericMessage> {
+        let url = format!("{API}/album/share/{album_token}");
+        let response: WaifuApiResponse = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("sending share album request")?
+            .json()
+            .await
+            .context("converting response")?;
+
+        match response {
+            WaifuApiResponse::WaifuGenericResponse(resp) => Ok(resp),
+            WaifuApiResponse::WaifuError(err) => Err(err.into()),
+            _ => anyhow::bail!("unexpected response from get album endpoint: {response:?}"),
+        }
+    }
+
+    pub async fn revoke_album(&self, album_token: &str) -> anyhow::Result<WaifuGenericMessage> {
+        let url = format!("{API}/album/revoke/{album_token}");
+        let response: WaifuApiResponse = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("sending share album request")?
+            .json()
+            .await
+            .context("converting response")?;
+
+        match response {
+            WaifuApiResponse::WaifuGenericResponse(resp) => Ok(resp),
+            WaifuApiResponse::WaifuError(err) => Err(err.into()),
+            _ => anyhow::bail!("unexpected response from get album endpoint: {response:?}"),
+        }
+    }
+
+    pub async fn download_full_album(&self, album_token: &str) -> anyhow::Result<Vec<u8>> {
+        let url = format!("{API}/album/download/{album_token}");
+        let response = self
+            .client
+            .post(&url)
+            .send()
+            .await
+            .context("sending download part album request")?;
+
+        let status = response.status();
+        match status {
+            reqwest::StatusCode::OK => {}
+            _ => {
+                let api_response: WaifuApiResponse =
+                    response.json().await.context("converting error")?;
+                match api_response {
+                    WaifuApiResponse::WaifuError(err) => return Err(err.into()),
+                    _ => anyhow::bail!(
+                        "unexpected error responser received from api: {api_response:?}"
+                    ),
+                }
+            }
+        }
+
+        let content = response
+            .bytes()
+            .await
+            .context("obtaining response bytes")?
+            .to_vec();
+
+        Ok(content)
+    }
+    pub async fn download_part_album(
+        &self,
+        album_token: &str,
+        file_ids: &[usize],
+    ) -> anyhow::Result<Vec<u8>> {
+        let url = format!("{API}/album/download/{album_token}");
+        let response = self
+            .client
+            .post(&url)
+            .json(&file_ids)
+            .send()
+            .await
+            .context("sending download part album request")?;
+
+        let status = response.status();
+        match status {
+            reqwest::StatusCode::OK => {}
+            _ => {
+                let api_response: WaifuApiResponse =
+                    response.json().await.context("converting error")?;
+                match api_response {
+                    WaifuApiResponse::WaifuError(err) => return Err(err.into()),
+                    _ => anyhow::bail!(
+                        "unexpected error response received from api: {api_response:?}"
+                    ),
+                }
+            }
+        }
+
+        let content = response
+            .bytes()
+            .await
+            .context("obtaining response bytes")?
+            .to_vec();
+
+        Ok(content)
+    }
 }
 
 /// Parses the response from the Waifu Vault API and converts it to
 /// a concrete type
-pub(crate) fn parse_response(response: WaifuApiResponse) -> anyhow::Result<WaifuResponse> {
+pub(crate) fn parse_response(response: WaifuApiResponse) -> anyhow::Result<WaifuFileEntry> {
     match response {
-        WaifuApiResponse::WaifuResponse(resp) => Ok(resp),
+        WaifuApiResponse::WaifuFileResponse(resp) => Ok(resp),
         WaifuApiResponse::WaifuError(err) => Err(anyhow::anyhow!(err)),
-        WaifuApiResponse::Delete(_) => unreachable!("unused"),
-        WaifuApiResponse::WaifuBucketResponse(_) => unreachable!("unused"),
+        _ => unreachable!("unused"),
     }
 }
 
@@ -741,6 +950,7 @@ mod tests {
             .options
             .expect("expected options when there are none");
 
+        println!("Options: {options:?}");
         assert!(options.hide_filename);
         assert!(options.protected);
         assert!(options.one_time_download);
@@ -884,7 +1094,7 @@ mod tests {
         let request = WaifuUploadRequest::new().file(&tmp.file);
         let response = caller.upload_file(request).await?;
         let token = response.token;
-        let success = caller.delete_file(token).await?;
+        let success = caller.delete_file(&token).await?;
 
         assert!(success);
         be_nice().await;
@@ -903,7 +1113,7 @@ mod tests {
         let response = caller.upload_file(request).await?;
         let url = response.url;
 
-        let response = caller.download_file(url, None).await?;
+        let response = caller.download_file(&url, None).await?;
         let result = hash_item(&response);
 
         assert_eq!(og_hash, result);
@@ -929,7 +1139,7 @@ mod tests {
         let url = response.url;
 
         let response = caller
-            .download_file(url, Some("banana".to_string()))
+            .download_file(&url, Some("banana".to_string()))
             .await?;
         let result = hash_item(&response);
 
@@ -947,7 +1157,7 @@ mod tests {
         let token = response.token;
         assert!(response.files.is_empty());
 
-        let resp = caller.delete_bucket(token).await?;
+        let resp = caller.delete_bucket(&token).await?;
         assert!(resp);
 
         be_nice().await;
@@ -964,7 +1174,7 @@ mod tests {
         assert!(info.token == token);
         assert!(info.files.is_empty());
 
-        caller.delete_bucket(token).await?;
+        caller.delete_bucket(&token).await?;
 
         be_nice().await;
 
@@ -988,7 +1198,7 @@ mod tests {
         let info = caller.get_bucket(&token).await?;
         assert!(info.files.len() == 1);
 
-        caller.delete_bucket(token).await?;
+        caller.delete_bucket(&token).await?;
 
         be_nice().await;
 

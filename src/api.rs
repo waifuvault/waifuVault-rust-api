@@ -9,10 +9,16 @@ use std::path::Path;
 #[serde(untagged)]
 pub(crate) enum WaifuApiResponse {
     /// Everything is good, contains the info about the uploaded file
-    WaifuResponse(WaifuResponse),
+    WaifuFileResponse(WaifuFileEntry),
 
     /// Everything is good, contains info about the bucket
-    WaifuBucketResponse(WaifuBucketResponse),
+    WaifuBucketResponse(WaifuBucketEntry),
+
+    /// Everything is good, contains info about the album
+    WaifuAlbumResponse(WaifuAlbumEntry),
+
+    /// Everything is good, contains generic success / failure message
+    WaifuGenericResponse(WaifuGenericMessage),
 
     /// Something went wrong, shows the error type and reason
     WaifuError(WaifuError),
@@ -24,7 +30,7 @@ pub(crate) enum WaifuApiResponse {
 
 /// This is a standard response for the service containing info about the entry
 #[derive(Debug, Deserialize, Clone)]
-pub struct WaifuResponse {
+pub struct WaifuFileEntry {
     /// File token - used for file info and deleting
     pub token: String,
 
@@ -34,17 +40,23 @@ pub struct WaifuResponse {
     /// Bucket identifier
     pub bucket: Option<String>,
 
+    /// Album the file is associated with, if any
+    pub album: Option<WaifuAlbumMetadata>,
+
+    /// Number of views the file has
+    pub views: usize,
+
     /// How long the file will exist for
     #[serde(rename = "retentionPeriod")]
     pub retention_period: serde_json::Value,
 
     /// Response options for the file
-    pub options: Option<WaifuResponseOptions>,
+    pub options: Option<WaifuFileOptions>,
 }
 
 /// Response options for the uploaded file
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
-pub struct WaifuResponseOptions {
+pub struct WaifuFileOptions {
     /// If the filename is hidden
     #[serde(rename = "hideFilename")]
     pub hide_filename: bool,
@@ -59,12 +71,64 @@ pub struct WaifuResponseOptions {
 
 /// Successful response from the API when interacting with the Bucket API
 #[derive(Debug, Deserialize, Clone)]
-pub struct WaifuBucketResponse {
+pub struct WaifuBucketEntry {
     /// Bucket token identifier
     pub token: String,
 
     /// Files contained within the bucket
-    pub files: Vec<WaifuResponse>,
+    pub files: Vec<WaifuFileEntry>,
+}
+
+/// Successful response from the API when interacting with the Album API
+#[derive(Debug, Deserialize, Clone)]
+pub struct WaifuAlbumEntry {
+    /// Album token identifier
+    pub token: String,
+
+    /// Bucket token identifier
+    #[serde(rename = "bucketToken")]
+    pub bucket_token: String,
+
+    /// Public token identifier
+    #[serde(rename = "publicToken")]
+    pub public_token: String,
+
+    /// Name of the Album
+    pub name: String,
+
+    /// Files contained within the Album
+    pub files: Vec<WaifuFileEntry>,
+}
+
+/// Album metadata which shows which album a file is apart of
+#[derive(Debug, Deserialize, Clone)]
+pub struct WaifuAlbumMetadata {
+    /// Album token
+    pub token: String,
+
+    /// Public token
+    #[serde(rename = "publicToken")]
+    pub public_token: String,
+
+    /// Album name
+    pub name: String,
+
+    /// Bucket name
+    pub bucket: String,
+
+    /// Date the album was created
+    #[serde(rename = "dateCreated")]
+    pub date_created: u64,
+}
+
+/// Generic response returned by the API indicating success / failure of operation
+#[derive(Debug, Deserialize, Clone)]
+pub struct WaifuGenericMessage {
+    /// If the operation was a success or not
+    pub success: bool,
+
+    /// Description provided by the API
+    pub description: String,
 }
 
 /// A standard error, all errors from the service take this shape
