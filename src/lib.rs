@@ -247,6 +247,7 @@ impl ApiCaller {
     /// ```
     pub async fn create_bucket(&self) -> anyhow::Result<WaifuBucketEntry> {
         let url = format!("{API}/bucket/create");
+
         let response: WaifuApiResponse = self
             .client
             .get(&url)
@@ -320,6 +321,7 @@ impl ApiCaller {
         let response: WaifuApiResponse = self
             .client
             .post(&url)
+            .header("Content-Type", "application/json")
             .json(&body)
             .send()
             .await
@@ -627,10 +629,10 @@ impl ApiCaller {
         let url = format!("{API}/album/{}", bucket_token);
         let mut body = HashMap::new();
         body.insert("name", album_name);
-
         let response: WaifuApiResponse = self
             .client
             .post(&url)
+            .header("Content-Type", "application/json")
             .json(&body)
             .send()
             .await
@@ -646,18 +648,19 @@ impl ApiCaller {
         }
     }
 
-    pub async fn associate_with_album<S: AsRef<str> + Serialize>(
+    pub async fn associate_with_album(
         &self,
-        album_token: S,
-        file_tokens: &[S],
+        album_token: &str,
+        file_tokens: &[&str],
     ) -> anyhow::Result<WaifuAlbumEntry> {
-        let url = format!("{API}/album/{}/associate", album_token.as_ref());
+        let url = format!("{API}/album/{}/associate", album_token);
         let mut body = HashMap::new();
         body.insert("fileTokens", file_tokens);
 
         let response: WaifuApiResponse = self
             .client
             .post(&url)
+            .header("Content-Type", "application/json")
             .json(&body)
             .send()
             .await
@@ -685,6 +688,7 @@ impl ApiCaller {
         let response: WaifuApiResponse = self
             .client
             .post(&url)
+            .header("Content-Type", "application/json")
             .json(&body)
             .send()
             .await
@@ -781,6 +785,7 @@ impl ApiCaller {
         let response = self
             .client
             .post(&url)
+            .header("Content-Type", "application/json")
             .send()
             .await
             .context("sending download part album request")?;
@@ -817,6 +822,7 @@ impl ApiCaller {
         let response = self
             .client
             .post(&url)
+            .header("Content-Type", "application/json")
             .json(&file_ids)
             .send()
             .await
@@ -896,6 +902,70 @@ mod tests {
         }
     }
 
+    struct Dropper<'a> {
+        pub album_tkn: Option<String>,
+        pub bucket_tkn: Option<String>,
+        pub file_tkn: Option<String>,
+        pub caller: &'a ApiCaller,
+    }
+
+    impl<'a> Dropper<'a> {
+        pub fn new(caller: &'a ApiCaller) -> Self {
+            Self {
+                caller,
+                album_tkn: None,
+                bucket_tkn: None,
+                file_tkn: None,
+            }
+        }
+
+        pub async fn create_bucket(&self) -> Result<WaifuBucketEntry> {
+            match self.caller.create_bucket().await {
+                Ok(r) => Ok(r),
+                Err(e) => {
+                    self.destroy().await?;
+                    return Err(e);
+                }
+            }
+        }
+
+        pub async fn upload_file(&self, upload_req: WaifuUploadRequest) -> Result<WaifuFileEntry> {
+            match self.caller.upload_file(upload_req).await {
+                Ok(r) => Ok(r),
+                Err(e) => {
+                    self.destroy().await?;
+                    return Err(e);
+                }
+            }
+        }
+
+        pub async fn create_album(&self, bkt_tkn: &str, name: &str) -> Result<WaifuAlbumEntry> {
+            match self.caller.create_album(bkt_tkn, name).await {
+                Ok(r) => Ok(r),
+                Err(e) => {
+                    self.destroy().await?;
+                    return Err(e);
+                }
+            }
+        }
+
+        pub async fn destroy(&self) -> anyhow::Result<()> {
+            if let Some(ref f_tkn) = self.file_tkn {
+                self.caller.delete_file(&f_tkn).await?;
+            }
+
+            if let Some(ref b_tkn) = self.bucket_tkn {
+                self.caller.delete_bucket(&b_tkn).await?;
+            }
+
+            if let Some(ref a_tkn) = self.album_tkn {
+                self.caller.delete_album(&a_tkn).await?;
+            }
+
+            Ok(())
+        }
+    }
+
     async fn cleanup(caller: &ApiCaller, token: &str) -> Result<()> {
         caller.delete_file(token).await?;
 
@@ -950,7 +1020,6 @@ mod tests {
             .options
             .expect("expected options when there are none");
 
-        println!("Options: {options:?}");
         assert!(options.hide_filename);
         assert!(options.protected);
         assert!(options.one_time_download);
@@ -1214,6 +1283,50 @@ mod tests {
         let inner = response.unwrap_err();
         let waifu_err = inner.downcast::<WaifuError>()?;
         assert_eq!(waifu_err.status, 400);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn create_album() -> Result<()> {
+        let caller = ApiCaller::new();
+        let dropper = Dropper::new(&caller);
+        let bucket_response = dropper.create_bucket().await?;
+        assert!(!bucket_response.token.is_empty());
+
+        let bkt_tkn = bucket_response.token;
+        let album_response = dropper.create_album(&bkt_tkn, "bigknob").await?;
+        assert!(album_response.files.is_empty());
+        dropper.destroy().await?;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn associate_file_with_album() -> Result<()> {
+        let caller = ApiCaller::new();
+        let dropper = Dropper::new(&caller);
+        let url = "https://waifuvault.moe/assets/custom/images/08.png";
+
+        let bucket = dropper.create_bucket().await?;
+        let request = WaifuUploadRequest::new()
+            .bucket(&bucket.token)
+            .url(url)
+            .expires("1h");
+
+        let file = dropper.upload_file(request).await?;
+        let album = dropper.create_album(&bucket.token, "dsklhjjsh").await?;
+
+        let success = match caller
+            .associate_with_album(&album.token, &[&file.token])
+            .await
+        {
+            Ok(success) => success,
+            Err(e) => {
+                dropper.destroy().await?;
+                return Err(e);
+            }
+        };
 
         Ok(())
     }

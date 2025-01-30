@@ -11,11 +11,11 @@ pub(crate) enum WaifuApiResponse {
     /// Everything is good, contains the info about the uploaded file
     WaifuFileResponse(WaifuFileEntry),
 
-    /// Everything is good, contains info about the bucket
-    WaifuBucketResponse(WaifuBucketEntry),
-
     /// Everything is good, contains info about the album
     WaifuAlbumResponse(WaifuAlbumEntry),
+
+    /// Everything is good, contains info about the bucket
+    WaifuBucketResponse(WaifuBucketEntry),
 
     /// Everything is good, contains generic success / failure message
     WaifuGenericResponse(WaifuGenericMessage),
@@ -77,6 +77,9 @@ pub struct WaifuBucketEntry {
 
     /// Files contained within the bucket
     pub files: Vec<WaifuFileEntry>,
+
+    /// Albums associated with the bucket, if any
+    pub albums: Option<Vec<WaifuAlbumMetadata>>,
 }
 
 /// Successful response from the API when interacting with the Album API
@@ -91,7 +94,7 @@ pub struct WaifuAlbumEntry {
 
     /// Public token identifier
     #[serde(rename = "publicToken")]
-    pub public_token: String,
+    pub public_token: Option<String>,
 
     /// Name of the Album
     pub name: String,
@@ -108,7 +111,7 @@ pub struct WaifuAlbumMetadata {
 
     /// Public token
     #[serde(rename = "publicToken")]
-    pub public_token: String,
+    pub public_token: Option<String>,
 
     /// Album name
     pub name: String,
