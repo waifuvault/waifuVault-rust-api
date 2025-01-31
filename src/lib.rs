@@ -8,7 +8,7 @@
 //! ```rust,no_run
 //! use waifuvault::{
 //!     ApiCaller,
-//!     api::{WaifuUploadRequest, WaifuResponse}
+//!     api::{WaifuUploadRequest}
 //! };
 //!
 //! #[tokio::main]
@@ -189,6 +189,70 @@
 //!     Ok(())
 //! }
 //! ```
+//!
+//! # Create an Album
+//!
+//! ```rust,no_run
+//! use waifuvault::ApiCaller;
+//!
+//! #[tokio::main]
+//! async fn main() -> anyhow::Result<()> {
+//!     let caller = ApiCaller::new();
+//!
+//!     let token = "some-bucket-token";
+//!
+//!     // Create a new album
+//!     let album_info = caller.create_album(token, "new_album").await?;
+//!
+//!     // You now have access to the album token to perform actions on the album
+//!
+//!     Ok(())
+//! }
+//! ```
+//!
+//! # Associate Files With An Album
+//!
+//! ```rust,no_run
+//! use waifuvault::ApiCaller;
+//!
+//! #[tokio::main]
+//! async fn main() -> anyhow::Result<()> {
+//!     let caller = ApiCaller::new();
+//!
+//!     let album_tkn = "album-tkn";
+//!     let file_1_tkn = "file_1_tkn";
+//!     let file_2_tkn = "file_2_tkn";
+//!
+//!     // Associate both files with the album
+//!     let album_info = caller.associate_with_album(album_tkn, &[file_1_tkn, file_2_tkn]).await?;
+//!
+//!     // Both files should now be part of the album
+//!
+//!     Ok(())
+//! }
+//! ```
+//!
+//! # Disassociate Files From An Album
+//!
+//! ```rust,no_run
+//! use waifuvault::ApiCaller;
+//!
+//! #[tokio::main]
+//! async fn main() -> anyhow::Result<()> {
+//!     let caller = ApiCaller::new();
+//!
+//!     let album_tkn = "album-tkn";
+//!     let file_1_tkn = "file_1_tkn";
+//!     let file_2_tkn = "file_2_tkn";
+//!
+//!     // Associate both files with the album
+//!     let album_info = caller.disassociate_with_album(album_tkn, &[file_1_tkn, file_2_tkn]).await?;
+//!
+//!     // Both files should now be removed from the album
+//!
+//!     Ok(())
+//! }
+//! ```
 pub mod api;
 
 use std::{collections::HashMap, path::PathBuf};
@@ -309,7 +373,7 @@ impl ApiCaller {
 
     /// Gets information on files contained within a Bucket with the Waifu Vault API
     ///
-    /// This returns a [`api::WaifuBucketResponse`] which contains an array of all files
+    /// This returns a [`api::WaifuBucketEntry`] which contains an array of all files
     /// contained within the bucket as well as the bucket token.
     ///
     /// # Example
@@ -349,7 +413,7 @@ impl ApiCaller {
     /// ```rust,no_run
     /// use waifuvault::{
     ///     ApiCaller,
-    ///     api::{WaifuUploadRequest, WaifuResponse}
+    ///     api::WaifuUploadRequest
     /// };
     /// #[tokio::main]
     /// async fn main() -> anyhow::Result<()> {
@@ -440,7 +504,7 @@ impl ApiCaller {
     /// ```rust,no_run
     /// use waifuvault::{
     ///     ApiCaller,
-    ///     api::{WaifuGetRequest, WaifuResponse}
+    ///     api::WaifuGetRequest
     /// };
     ///
     /// #[tokio::main]
@@ -485,7 +549,7 @@ impl ApiCaller {
     /// ```rust,no_run
     /// use waifuvault::{
     ///     ApiCaller,
-    ///     api::{WaifuModificationRequest, WaifuResponse}
+    ///     api::WaifuModificationRequest
     /// };
     ///
     /// #[tokio::main]
@@ -623,6 +687,26 @@ impl ApiCaller {
         Ok(content)
     }
 
+    /// Creates an album on the WaifuVault service
+    ///
+    /// This requires the token from a previously created bucket
+    /// Returns information relating to the newly created album
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use waifuvault::ApiCaller;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> anyhow::Result<()> {
+    ///     let caller = ApiCaller::new();
+    ///
+    ///     let bucket = caller.create_bucket().await?;
+    ///     let album_info = caller.create_album(&bucket.token, "new_album").await?;
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
     pub async fn create_album(
         &self,
         bucket_token: &str,
@@ -650,6 +734,29 @@ impl ApiCaller {
         }
     }
 
+    /// Associates a collection of Files with an Album
+    ///
+    /// This requires an array of File tokens already present on Waifu Vault
+    /// and a previously created album.
+    /// Returns information relating to the updated album
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use waifuvault::ApiCaller;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> anyhow::Result<()> {
+    ///     let caller = ApiCaller::new();
+    ///
+    ///     let file_token1 = "file-token-1";
+    ///     let file_token2 = "file-token-2";
+    ///     let album_token = "album-token";
+    ///     let album_info = caller.associate_with_album(album_token, &[file_token1, file_token2]).await?;
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
     pub async fn associate_with_album(
         &self,
         album_token: &str,
@@ -678,6 +785,29 @@ impl ApiCaller {
         }
     }
 
+    /// Disassociate a collection of Files with an Album
+    ///
+    /// This requires an array of File tokens already present on Waifu Vault
+    /// and a previously created album.
+    /// Returns information relating to the updated album
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use waifuvault::ApiCaller;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> anyhow::Result<()> {
+    ///     let caller = ApiCaller::new();
+    ///
+    ///     let file_token1 = "file-token-1";
+    ///     let file_token2 = "file-token-2";
+    ///     let album_token = "album-token";
+    ///     let album_info = caller.disassociate_from_album(album_token, &[file_token1, file_token2]).await?;
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
     pub async fn disassociate_from_album(
         &self,
         album_token: &str,
@@ -706,11 +836,37 @@ impl ApiCaller {
         }
     }
 
-    pub async fn delete_album(&self, album_token: &str) -> anyhow::Result<WaifuGenericMessage> {
+    /// Delete an album from Waifu Vault
+    ///
+    /// Returns the status of the operation indicating if it was successful or not.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use waifuvault::ApiCaller;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> anyhow::Result<()> {
+    ///     let caller = ApiCaller::new();
+    ///
+    ///     let album_token = "album-token";
+    ///     let status = caller.delete_album(album_token).await?;
+    ///
+    ///     assert!(status.success);
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn delete_album(
+        &self,
+        album_token: &str,
+        delete_files: bool,
+    ) -> anyhow::Result<WaifuGenericMessage> {
         let url = format!("{API}/album/{}", album_token);
         let response: WaifuApiResponse = self
             .client
             .delete(&url)
+            .query(&[("deleteFiles", delete_files)])
             .send()
             .await
             .context("sending album delete request")?
@@ -725,6 +881,25 @@ impl ApiCaller {
         }
     }
 
+    /// Get information about album from Waifu Vault
+    ///
+    /// Returns information relating to the album
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use waifuvault::ApiCaller;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> anyhow::Result<()> {
+    ///     let caller = ApiCaller::new();
+    ///
+    ///     let album_token = "album-token";
+    ///     let album_info = caller.get_album(album_token).await?;
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
     pub async fn get_album(&self, album_token: &str) -> anyhow::Result<WaifuAlbumEntry> {
         let url = format!("{API}/album/{album_token}");
         let response: WaifuApiResponse = self
@@ -744,6 +919,29 @@ impl ApiCaller {
         }
     }
 
+    /// Share an album from Waifu Vault
+    ///
+    /// Returns a staus object indicating the success of the operation.
+    /// It also contains the URL of the public album in the `description`.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use waifuvault::ApiCaller;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> anyhow::Result<()> {
+    ///     let caller = ApiCaller::new();
+    ///
+    ///     let album_token = "album-token";
+    ///     let status = caller.share_album(album_token).await?;
+    ///
+    ///     assert!(status.success);
+    ///     let shareable_url = status.description;
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
     pub async fn share_album(&self, album_token: &str) -> anyhow::Result<WaifuGenericMessage> {
         let url = format!("{API}/album/share/{album_token}");
         let response: WaifuApiResponse = self
@@ -763,6 +961,28 @@ impl ApiCaller {
         }
     }
 
+    /// Revokes public access from an album on Waifu Vault
+    ///
+    /// Any public URLs to the album are invalidated.
+    /// Returns a staus object indicating the success of the operation.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use waifuvault::ApiCaller;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> anyhow::Result<()> {
+    ///     let caller = ApiCaller::new();
+    ///
+    ///     let album_token = "album-token";
+    ///     let status = caller.revoke_album(album_token).await?;
+    ///
+    ///     assert!(status.success);
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
     pub async fn revoke_album(&self, album_token: &str) -> anyhow::Result<WaifuGenericMessage> {
         let url = format!("{API}/album/revoke/{album_token}");
         let response: WaifuApiResponse = self
@@ -782,6 +1002,31 @@ impl ApiCaller {
         }
     }
 
+    /// Downloads a zip archive of an album on Waifu Vault
+    ///
+    /// If `file_ids` is passed, it returns only those files in the archive.
+    /// If `None`, the entire contents of the album are returned
+    ///
+    /// Returns a `Vec<u8>` containing the zipped data.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use waifuvault::ApiCaller;
+    /// use std::io::Write;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> anyhow::Result<()> {
+    ///     let caller = ApiCaller::new();
+    ///
+    ///     let album_token = "album-token";
+    ///     let zipped_contents = caller.download_album(album_token, None).await?;
+    ///     let mut f = std::fs::File::create("archive.zip")?;
+    ///     f.write_all(&zipped_contents)?;
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
     pub async fn download_album(
         &self,
         album_token: &str,
@@ -838,9 +1083,8 @@ pub(crate) fn parse_response(response: WaifuApiResponse) -> anyhow::Result<Waifu
 
 #[cfg(test)]
 mod tests {
-    // These tests run against the actual API endpoint because i dont know how to mock these calls
-    // Each test has a `be_nice()` call which adds a small delay for requests
-    // Until mocking is easier, test liberally
+    // When running in test environment, it uses a local API version so the WaifuVault
+    // must be set up to run locally.
     use super::*;
     use anyhow::Result;
     use rand::RngCore;
@@ -944,7 +1188,7 @@ mod tests {
             }
 
             if let Some(ref a_tkn) = self.album_tkn {
-                self.caller.delete_album(&a_tkn).await?;
+                self.caller.delete_album(&a_tkn, true).await?;
             }
 
             Ok(())
@@ -1371,13 +1615,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn delete_album() -> Result<()> {
+    async fn delete_album_keep_files() -> Result<()> {
+        let url = "https://waifuvault.moe/assets/custom/images/08.png";
+
         let caller = ApiCaller::new();
         let mut dropper = Dropper::new(&caller);
         let bucket = dropper.create_bucket().await?;
+        let request = WaifuUploadRequest::new()
+            .bucket(&bucket.token)
+            .url(url)
+            .expires("1h");
+
+        dropper.upload_file(request).await?;
         let album = dropper.create_album(&bucket.token, "test_bucket").await?;
 
-        let delete = match caller.delete_album(&album.token).await {
+        let delete = match caller.delete_album(&album.token, false).await {
             Ok(success) => success,
             Err(e) => {
                 let _ = dropper.destroy().await;
@@ -1386,6 +1638,42 @@ mod tests {
         };
 
         assert!(delete.success);
+
+        let bucket_info = caller.get_bucket(&bucket.token).await?;
+        assert!(!bucket_info.files.is_empty());
+
+        let _ = dropper.destroy().await;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn delete_album_remove_files() -> Result<()> {
+        let url = "https://waifuvault.moe/assets/custom/images/08.png";
+
+        let caller = ApiCaller::new();
+        let mut dropper = Dropper::new(&caller);
+        let bucket = dropper.create_bucket().await?;
+        let request = WaifuUploadRequest::new()
+            .bucket(&bucket.token)
+            .url(url)
+            .expires("1h");
+
+        dropper.upload_file(request).await?;
+        let album = dropper.create_album(&bucket.token, "test_bucket").await?;
+
+        let delete = match caller.delete_album(&album.token, true).await {
+            Ok(success) => success,
+            Err(e) => {
+                let _ = dropper.destroy().await;
+                return Err(e);
+            }
+        };
+
+        assert!(delete.success);
+
+        let bucket_info = caller.get_bucket(&bucket.token).await?;
+        assert!(bucket_info.files.is_empty());
 
         let _ = dropper.destroy().await;
 
