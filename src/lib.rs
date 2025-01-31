@@ -199,8 +199,11 @@ use anyhow::Context;
 use reqwest::Client;
 
 /// REST endpoint for the service
-// const API: &str = "https://waifuvault.moe/rest";
-const API: &str = "http:127.0.0.1:8081/rest";
+#[cfg(not(test))]
+const API: &str = "https://waifuvault.moe/rest";
+
+#[cfg(test)]
+const API: &str = "http://127.0.0.1:8081/rest";
 
 /// Api controller which calls the endpoint
 #[derive(Debug, Clone, Default)]
@@ -367,8 +370,6 @@ impl ApiCaller {
         } else {
             API
         };
-
-        println!("API: {url}");
 
         let request = {
             let mut intermediate = self.client.put(url).query(&[
@@ -781,11 +782,20 @@ impl ApiCaller {
         }
     }
 
-    pub async fn download_full_album(&self, album_token: &str) -> anyhow::Result<Vec<u8>> {
+    pub async fn download_album(
+        &self,
+        album_token: &str,
+        file_ids: Option<&[usize]>,
+    ) -> anyhow::Result<Vec<u8>> {
         let url = format!("{API}/album/download/{album_token}");
+        let body = match file_ids {
+            Some(ids) => ids,
+            None => &vec![],
+        };
         let response = self
             .client
             .post(&url)
+            .json(&body)
             .header("Content-Type", "application/json")
             .send()
             .await
@@ -801,44 +811,6 @@ impl ApiCaller {
                     WaifuApiResponse::WaifuError(err) => return Err(err.into()),
                     _ => anyhow::bail!(
                         "unexpected error responser received from api: {api_response:?}"
-                    ),
-                }
-            }
-        }
-
-        let content = response
-            .bytes()
-            .await
-            .context("obtaining response bytes")?
-            .to_vec();
-
-        Ok(content)
-    }
-    pub async fn download_part_album(
-        &self,
-        album_token: &str,
-        file_ids: &[usize],
-    ) -> anyhow::Result<Vec<u8>> {
-        let url = format!("{API}/album/download/{album_token}");
-        let response = self
-            .client
-            .post(&url)
-            .header("Content-Type", "application/json")
-            .json(&file_ids)
-            .send()
-            .await
-            .context("sending download part album request")?;
-
-        let status = response.status();
-        match status {
-            reqwest::StatusCode::OK => {}
-            _ => {
-                let api_response: WaifuApiResponse =
-                    response.json().await.context("converting error")?;
-                match api_response {
-                    WaifuApiResponse::WaifuError(err) => return Err(err.into()),
-                    _ => anyhow::bail!(
-                        "unexpected error response received from api: {api_response:?}"
                     ),
                 }
             }
@@ -1354,7 +1326,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn disassociate_from_album() -> anyhow::Result<()> {
+    async fn disassociate_from_album() -> Result<()> {
         let caller = ApiCaller::new();
         let mut dropper = Dropper::new(&caller);
         let url = "https://waifuvault.moe/assets/custom/images/08.png";
@@ -1403,7 +1375,7 @@ mod tests {
         let caller = ApiCaller::new();
         let mut dropper = Dropper::new(&caller);
         let bucket = dropper.create_bucket().await?;
-        let album = dropper.create_album(&bucket.token, "tittyjiggler").await?;
+        let album = dropper.create_album(&bucket.token, "test_bucket").await?;
 
         let delete = match caller.delete_album(&album.token).await {
             Ok(success) => success,
@@ -1414,6 +1386,92 @@ mod tests {
         };
 
         assert!(delete.success);
+
+        let _ = dropper.destroy().await;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn get_album() -> Result<()> {
+        let caller = ApiCaller::new();
+        let mut dropper = Dropper::new(&caller);
+        let bucket = dropper.create_bucket().await?;
+        let album = dropper.create_album(&bucket.token, "test_bucket").await?;
+        let retrieve = match caller.get_album(&album.token).await {
+            Ok(success) => success,
+            Err(e) => {
+                let _ = dropper.destroy().await;
+                return Err(e);
+            }
+        };
+
+        assert_eq!(retrieve.token, album.token);
+        assert_eq!(retrieve.bucket_token, bucket.token);
+        assert!(retrieve.public_token.is_none());
+
+        let _ = dropper.destroy().await;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn share_album() -> Result<()> {
+        let caller = ApiCaller::new();
+        let mut dropper = Dropper::new(&caller);
+        let bucket = dropper.create_bucket().await?;
+        let album = dropper.create_album(&bucket.token, "test_bucket").await?;
+
+        let share = match caller.share_album(&album.token).await {
+            Ok(success) => success,
+            Err(e) => {
+                let _ = dropper.destroy().await;
+                return Err(e);
+            }
+        };
+
+        assert!(share.success);
+        assert!(share
+            .description
+            .starts_with("http://localhost:8081/album/"));
+
+        let _ = dropper.destroy().await;
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn download_album() -> Result<()> {
+        let url = "https://waifuvault.moe/assets/custom/images/08.png";
+
+        let caller = ApiCaller::new();
+        let mut dropper = Dropper::new(&caller);
+        let bucket = dropper.create_bucket().await?;
+        let request = WaifuUploadRequest::new()
+            .bucket(&bucket.token)
+            .url(url)
+            .expires("1h");
+
+        let file = dropper.upload_file(request).await?;
+        let request = WaifuUploadRequest::new()
+            .bucket(&bucket.token)
+            .url(url)
+            .expires("1h");
+        let file2 = dropper.upload_file(request).await?;
+        let album = dropper.create_album(&bucket.token, "test_bucket").await?;
+        caller
+            .associate_with_album(&album.token, &[&file.token, &file2.token])
+            .await?;
+
+        let files = match caller.download_album(&album.token, None).await {
+            Ok(success) => success,
+            Err(e) => {
+                let _ = dropper.destroy().await;
+                return Err(e);
+            }
+        };
+
+        assert!(!files.is_empty());
 
         let _ = dropper.destroy().await;
 
