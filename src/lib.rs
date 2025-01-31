@@ -246,13 +246,121 @@
 //!     let file_2_tkn = "file_2_tkn";
 //!
 //!     // Associate both files with the album
-//!     let album_info = caller.disassociate_with_album(album_tkn, &[file_1_tkn, file_2_tkn]).await?;
+//!     let album_info = caller.disassociate_from_album(album_tkn, &[file_1_tkn, file_2_tkn]).await?;
 //!
 //!     // Both files should now be removed from the album
 //!
 //!     Ok(())
 //! }
 //! ```
+//!
+//! # Delete An Album
+//!
+//! ```rust,no_run
+//! use waifuvault::ApiCaller;
+//!
+//! #[tokio::main]
+//! async fn main() -> anyhow::Result<()> {
+//!     let caller = ApiCaller::new();
+//!
+//!     let album_tkn = "album-tkn";
+//!
+//!     // Delete an album but keep the files in the bucket
+//!     let status = caller.delete_album(album_tkn, false).await?;
+//!     
+//!     // We can also delete the album and any files from the bucket as well
+//!     let status = caller.delete_album(album_tkn, true).await?;
+//!
+//!     Ok(())
+//! }
+//! ```
+//!
+//! # Get an Album
+//!
+//! ```rust,no_run
+//! use waifuvault::ApiCaller;
+//!
+//! #[tokio::main]
+//! async fn main() -> anyhow::Result<()> {
+//!     let caller = ApiCaller::new();
+//!
+//!     let album_tkn = "album-tkn";
+//!
+//!     // Get information about the contents of an album
+//!     let album_info = caller.get_album(album_tkn).await?;
+//!
+//!     Ok(())
+//! }
+//! ```
+//!
+//! # Share an Album
+//!
+//! ```rust,no_run
+//! use waifuvault::ApiCaller;
+//!
+//! #[tokio::main]
+//! async fn main() -> anyhow::Result<()> {
+//!     let caller = ApiCaller::new();
+//!
+//!     let album_tkn = "album-tkn";
+//!
+//!     // Obtain a public URL to the album
+//!     let status = caller.share_album(album_tkn).await?;
+//!
+//!     // The description contains the public URL you can use to access the album
+//!     // on the web
+//!     let public_url = status.description;
+//!
+//!     Ok(())
+//! }
+//! ```
+//!
+//! # Revoke Access to a Public Album
+//!
+//! ```rust,no_run
+//! use waifuvault::ApiCaller;
+//!
+//! #[tokio::main]
+//! async fn main() -> anyhow::Result<()> {
+//!     let caller = ApiCaller::new();
+//!
+//!     let album_tkn = "album-tkn";
+//!
+//!     // Revoke access to the public album
+//!     // This will invalidate the Public URL to the album making it inaccessible
+//!     let status = caller.revoke_album(album_tkn).await?;
+//!
+//!     Ok(())
+//! }
+//! ```
+//!
+//! # Download a Zip Archive of an Album
+//!
+//! ```rust,no_run
+//! use waifuvault::ApiCaller;
+//! use std::io::Write;
+//!
+//! #[tokio::main]
+//! async fn main() -> anyhow::Result<()> {
+//!     let caller = ApiCaller::new();
+//!
+//!     let album_tkn = "album-tkn";
+//!
+//!     // If the `file_ids` passed is `None`, it will download the entire album
+//!     let contents = caller.download_album(album_tkn, None).await?;
+//!
+//!     // If you know the File IDs you want to download, you can specify them
+//!     // This will only download those files from the album
+//!     let contents = caller.download_album(album_tkn, Some(&[0, 1, 2])).await?;
+//!
+//!     // You can then unzip them in code or save them to disk like so
+//!     let mut f = std::fs::File::create("archive.zip")?;
+//!     f.write_all(&contents)?;
+//!
+//!     Ok(())
+//! }
+//! ```
+
 pub mod api;
 
 use std::{collections::HashMap, path::PathBuf};
@@ -838,6 +946,8 @@ impl ApiCaller {
 
     /// Delete an album from Waifu Vault
     ///
+    /// If `deleteFiles` is true, will delete the files from the bucket as well.
+    ///
     /// Returns the status of the operation indicating if it was successful or not.
     ///
     /// # Example
@@ -850,7 +960,10 @@ impl ApiCaller {
     ///     let caller = ApiCaller::new();
     ///
     ///     let album_token = "album-token";
-    ///     let status = caller.delete_album(album_token).await?;
+    ///
+    ///     // Keep files associated with the bucket
+    ///     // Pass `true` to delete files from the bucket as well
+    ///     let status = caller.delete_album(album_token, false).await?;
     ///
     ///     assert!(status.success);
     ///
