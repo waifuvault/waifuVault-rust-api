@@ -33,8 +33,6 @@ The following interactions are allowed:
 
 ## Upload a File<a id="upload-file"></a>
 
-<a>
-
 The following options can be set when creating a `WaifuUploadRequest`:
 
 * `file`: Optional value to upload a file from disk
