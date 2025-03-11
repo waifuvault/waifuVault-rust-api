@@ -40,6 +40,9 @@ pub struct WaifuFileEntry {
     /// Bucket identifier
     pub bucket: Option<String>,
 
+    /// ID of the file
+    pub id: usize,
+
     /// Album the file is associated with, if any
     pub album: Option<WaifuAlbumMetadata>,
 
